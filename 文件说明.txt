@@ -1,0 +1,30 @@
+论文GitHub上传包：文件用途说明
+
+对应论文：Low-Overhead Distributed Power Control for Cell-Free Massive MIMO With Limited Fronthaul Capacity
+IEEE链接：https://ieeexplore.ieee.org/abstract/document/11614834
+DOI：10.1109/LWC.2026.3715345
+
+一、8个核心Python文件
+CF_mMIMO_Channel.py：生成AP/用户位置、相关信道及MR预编码矩阵，并保存训练所需H、W数组；支持样本数、网络规模、功率与随机种子参数。
+functionRlocalscattering.py：计算局部散射空间相关矩阵，供信道生成器调用。
+model_architecture_v2.py：IB编码器、注意力聚合器、迭代功率策略、系统前向过程与SE损失。
+train_federated_cluster.py：用户簇联邦训练、验证、模型保存，保留原有unlearn可选入口。
+train_and_evaluate_v2.py：集中式IB训练、验证、不同beta设置和训练曲线。
+benchmark_upper_bound.py：原WMMSE功率优化基线与SE统计，文件名沿用原代码。
+test_noise_federated.py：加载训练生成的联邦权重，执行含噪CSI测试和鲁棒性绘图。
+test_wmmse_noise.py：执行含噪CSI下的WMMSE计算、MR预编码更新和鲁棒性统计。
+
+二、8个仓库说明与配置文件
+README.md：GitHub首页，包含文章信息、环境、完整运行顺序、数据选择、输出说明及BibTeX引用。
+requirements.txt：已检查环境对应的Python依赖版本。
+CITATION.cff：GitHub可识别的引用元数据，首选引用为对应论文。
+citation.bib：可直接用于LaTeX文献管理的BibTeX条目。
+.gitignore：排除生成的数据、权重、图像和缓存，保持仓库为源码发布包。
+.gitattributes：文本与换行配置，便于跨平台协作。
+文件说明.txt：本文件。
+上传说明.txt：供仓库管理员使用的直接上传步骤。
+
+三、使用顺序
+安装依赖 → 生成信道 → 联邦/集中式训练 → WMMSE基线 → 两类噪声鲁棒性测试。具体命令和参数见README.md。
+本包不带已有信道、权重与历史结果；这些文件在运行时生成。所有文件平铺放置。
+整理来源仅为11.21的8份核心代码及信息瓶颈_11.21_final中的对应Python源码。兼容改动及小规模功能检查范围已在README中列明。
