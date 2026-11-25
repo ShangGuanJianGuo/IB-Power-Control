@@ -1,15 +1,4 @@
-"""
-联邦学习 + 机器遗忘 版本（基于服务簇）
-
-核心思想：
-- 客户端 = 每个UE的服务簇（主AP + 辅助APs）
-- 联邦通信：只交换压缩后的z，不交换原始CSI
-- IB的β控制隐私-性能权衡：高β = 更强隐私
-
-使用方法：
-    python train_federated_cluster.py --mode train --beta 1.0
-    python train_federated_cluster.py --mode unlearn --forget_ue 5
-"""
+"""Cluster-labelled IB power-control training and numeric validation outputs."""
 
 import torch
 import torch.nn as nn
@@ -18,8 +7,8 @@ import numpy as np
 import os
 import copy
 from tqdm import tqdm
-import matplotlib.pyplot as plt
 import argparse
+import csv
 
 # ===== 直接导入原有模型 =====
 from model_architecture_v2 import (
@@ -64,12 +53,10 @@ class ClusterFederatedSystem:
         self.K = K
         self.device = device
         
-        # 每个UE簇的贡献权重（用于遗忘）
+        # 每个UE簇的贡献权重
         self.cluster_weights = torch.ones(K) / K
         self.cluster_active = torch.ones(K, dtype=torch.bool)  # 哪些簇是活跃的
         
-        # 记录每个簇的梯度贡献（用于遗忘）
-        self.cluster_gradients = {k: [] for k in range(K)}
         
     def get_cluster_mask(self, connectivity_mask, ue_id):
         """获取服务特定UE的AP掩码"""
@@ -96,7 +83,7 @@ class ClusterFederatedSystem:
         # 计算每个簇的SE贡献
         se_per_ue = self._compute_se_per_ue(P, H, W)  # (B, K)
         
-        # 加权（遗忘的UE权重为0）
+        # 按簇权重汇总
         weighted_se = se_per_ue * self.cluster_weights.to(self.device)
         
         return P, kl, weighted_se, se_per_ue
@@ -112,54 +99,6 @@ class ClusterFederatedSystem:
         sinr = signal / (interference + noise_power + 1e-8)
         return torch.log2(1 + sinr)  # (B, K)
     
-    def unlearn_cluster(self, forget_ue_id, train_loader, epochs=5, lr=1e-3):
-        """
-        遗忘特定UE簇的贡献
-        
-        方法：梯度上升 - 在要遗忘的UE数据上反向优化
-        """
-        print(f"\n{'='*50}")
-        print(f"Unlearning UE {forget_ue_id}...")
-        print(f"{'='*50}")
-        
-        # 标记该簇为非活跃
-        self.cluster_active[forget_ue_id] = False
-        self.cluster_weights[forget_ue_id] = 0.0
-        
-        # 重新归一化权重
-        active_sum = self.cluster_weights.sum()
-        if active_sum > 0:
-            self.cluster_weights = self.cluster_weights / active_sum
-        
-        # 梯度上升：在遗忘UE的数据上"反向学习"
-        self.global_model.train()
-        optimizer = torch.optim.Adam(self.global_model.parameters(), lr=lr)
-        
-        for epoch in range(epochs):
-            total_loss = 0
-            for H, W, Beta, Mask in train_loader:
-                H, W = H.to(self.device), W.to(self.device)
-                Beta, Mask = Beta.to(self.device), Mask.to(self.device)
-                
-                optimizer.zero_grad()
-                
-                P, kl = self.global_model(H, W, Beta, Mask)
-                se_per_ue = self._compute_se_per_ue(P, H, W)
-                
-                # 只针对要遗忘的UE做梯度上升（最大化损失=最小化性能）
-                forget_se = se_per_ue[:, forget_ue_id].mean()
-                loss = forget_se  # 最大化这个UE的SE的负值 = 降低性能
-                
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.global_model.parameters(), 1.0)
-                optimizer.step()
-                
-                total_loss += loss.item()
-            
-            print(f"  Unlearn epoch {epoch+1}: loss = {total_loss/len(train_loader):.4f}")
-        
-        print(f"UE {forget_ue_id} unlearned. Active clusters: {self.cluster_active.sum().item()}")
-        return self.cluster_weights
 
 
 # ==================== 数据加载 ====================
@@ -311,71 +250,21 @@ def train_federated(args):
             }, f"federated_cluster_beta_{args.beta}.pth")
             print(f"  -> Saved (best SE: {best_se:.2f})")
     
-    # 绘图
-    plt.figure(figsize=(10, 6))
-    plt.plot(history['train_se'], label='Train SE')
-    plt.plot(history['val_se'], label='Val SE')
-    plt.xlabel('Epoch')
-    plt.ylabel('Sum SE (bps/Hz)')
-    plt.title(f'Cluster-based Federated Training (β={args.beta})')
-    plt.legend()
-    plt.grid(True, linestyle=':')
-    plt.savefig(f"federated_cluster_training_beta_{args.beta}.png", dpi=300)
-    plt.close()
-    
+    with open(f'federated_training_history_beta_{args.beta}.csv', 'w', encoding='utf-8', newline='') as handle:
+        writer = csv.writer(handle)
+        writer.writerow(['epoch', 'train_sum_se', 'validation_sum_se'])
+        writer.writerows((i + 1, tr, va) for i, (tr, va) in enumerate(zip(history['train_se'], history['val_se'])))
+
     print(f"\nBest Val SE: {best_se:.2f}")
     return fed_system
 
 
-def unlearn_ue(args):
-    """遗忘特定UE"""
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    
-    train_loader, val_loader = load_data(args)
-    
-    # 加载模型
-    model = Iterative_IB_System(
-        args.L, args.K, args.M, args.z_dim, args.Pmax, args.num_iterations
-    ).to(device)
-    
-    ckpt = torch.load(f"federated_cluster_beta_{args.beta}.pth", map_location=device)
-    model.load_state_dict(ckpt['model_state_dict'])
-    
-    # 重建联邦系统
-    fed_system = ClusterFederatedSystem(model, args.K, device)
-    fed_system.cluster_weights = ckpt['fed_system_weights']
-    fed_system.cluster_active = ckpt['fed_system_active']
-    
-    # 遗忘前评估
-    se_before, se_per_ue_before = validate(fed_system, val_loader, device)
-    print(f"Before unlearning: Total SE = {se_before:.2f}")
-    print(f"  UE {args.forget_ue} SE = {se_per_ue_before[args.forget_ue]:.4f}")
-    
-    # 执行遗忘
-    fed_system.unlearn_cluster(args.forget_ue, train_loader, epochs=args.unlearn_epochs)
-    
-    # 遗忘后评估
-    se_after, se_per_ue_after = validate(fed_system, val_loader, device)
-    print(f"\nAfter unlearning: Total SE = {se_after:.2f}")
-    print(f"  UE {args.forget_ue} SE = {se_per_ue_after[args.forget_ue]:.4f}")
-    print(f"  SE change: {se_after - se_before:+.2f}")
-    
-    # 保存
-    torch.save({
-        'model_state_dict': model.state_dict(),
-        'fed_system_weights': fed_system.cluster_weights,
-        'fed_system_active': fed_system.cluster_active,
-        'forgotten_ue': args.forget_ue,
-        'se_before': se_before,
-        'se_after': se_after
-    }, f"federated_cluster_unlearned_ue{args.forget_ue}.pth")
 
 
 # ==================== 主程序 ====================
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--mode', type=str, default='train', choices=['train', 'unlearn'])
     parser.add_argument('--L', type=int, default=40)
     parser.add_argument('--K', type=int, default=30)
     parser.add_argument('--M', type=int, default=8)
@@ -390,15 +279,10 @@ if __name__ == "__main__":
     parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('--lr', type=float, default=1e-3)
     parser.add_argument('--beta', type=float, default=10.0)
-    parser.add_argument('--forget_ue', type=int, default=0)
-    parser.add_argument('--unlearn_epochs', type=int, default=5)
     
     args = parser.parse_args()
     
     torch.manual_seed(42)
     np.random.seed(42)
     
-    if args.mode == 'train':
-        train_federated(args)
-    else:
-        unlearn_ue(args)
+    train_federated(args)

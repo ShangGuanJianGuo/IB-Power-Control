@@ -1,7 +1,0 @@
-﻿当前仓库： https://github.com/ShangGuanJianGuo/IB-Power-Control
-这次更新覆盖main中的旧源码文件，保留Git历史，可从旧提交恢复。
-下载后将源码文件放在同一目录，安装requirements.txt，再按README.md顺序执行。
-不同噪声测试应使用最终corrected脚本；旧文件名已转接到新入口。
-压缩包只含仓库根目录源码及说明，不含.git、信道、权重或历史结果。
-直接上传GitHub时先解压，把所有文件放在仓库根目录；不要上传外层ZIP作为唯一源码文件。
-数据和模型需要本地生成或另行取得；源码更新不等于所有论文结论已经重新确认。

@@ -307,33 +307,8 @@ class TaskOrientedIBFederatedController(nn.Module):
         return p_current, total_kl / self.num_power_iterations, rates
 
 
-def alpha_fair_utility(rates: torch.Tensor, alpha: float, eps: float = 1e-3) -> torch.Tensor:
-    if alpha == 0.0:
-        return rates.sum(dim=1)
-    if alpha == 1.0:
-        return torch.log(rates + eps).sum(dim=1)
-    return (((rates + eps) ** (1.0 - alpha)) / (1.0 - alpha)).sum(dim=1)
 
 
-def task_oriented_ib_loss(
-    rates: torch.Tensor,
-    kl_div: torch.Tensor,
-    beta_ib: float,
-    alpha: float = 0.0,
-    min_rate_target: float = 0.0,
-    min_rate_weight: float = 0.0,
-):
-    utility = alpha_fair_utility(rates, alpha=alpha)
-    rate_penalty = torch.relu(min_rate_target - rates).mean() if min_rate_target > 0 else rates.new_tensor(0.0)
-    loss = -utility.mean() + beta_ib * kl_div.mean() + min_rate_weight * rate_penalty
-    return loss, {
-        "utility": float(utility.mean().detach().cpu()),
-        "sum_rate": float(rates.sum(dim=1).mean().detach().cpu()),
-        "mean_rate": float(rates.mean().detach().cpu()),
-        "min_rate": float(rates.min(dim=1).values.mean().detach().cpu()),
-        "kl": float(kl_div.mean().detach().cpu()),
-        "rate_penalty": float(rate_penalty.detach().cpu()),
-    }
 
 
 @torch.no_grad()

@@ -1,17 +1,7 @@
-"""Corrected beta-sweep robustness evaluation for old federated checkpoints.
+"""Evaluate IB power control under per-link channel-estimation noise.
 
-This script is intentionally separate from test_noise_federated.py.  The old
-checkpoints store their clean validation SE in the checkpoint metadata, while
-the current model code can no longer reproduce those clean values exactly.  To
-avoid silently mixing inconsistent code/data states, this evaluator reports:
-
-1) raw_current_se: SE recomputed with the current code;
-2) anchored_se: checkpoint clean SE multiplied by the measured degradation
-   ratio raw_noisy_se / raw_clean_se.
-
-Anchored values reproduce a historical-clean-normalized curve; they are not
-direct forward SE and do not resolve the code/checkpoint or physical-power
-issues documented in KNOWN_ISSUES.md. Both raw and anchored columns are retained.
+Export direct clean/noisy SE and the separately identified historical-clean
+normalization, with repeated noise trials and recomputed MR precoding.
 """
 
 import argparse
@@ -22,7 +12,6 @@ import re
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Tuple
 
-import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
@@ -216,35 +205,6 @@ def write_csv(rows: List[Dict[str, float]], path: str) -> None:
         writer.writerows(rows)
 
 
-def plot_results(rows: List[Dict[str, float]], args: argparse.Namespace, output_path: str) -> None:
-    betas = sorted({row["beta"] for row in rows})
-    snrs = sorted({row["snr_db"] for row in rows}, reverse=False)
-    plt.figure(figsize=(7.2, 5.2))
-    marker_cycle = ["o", "s", "^", "D", "v", ">", "<", "p"]
-    color_cycle = ["#d62728", "#2ca02c", "#1f77b4", "#9467bd", "#ff7f0e", "#17becf", "#8c564b"]
-
-    for idx, beta in enumerate(betas):
-        beta_rows = {row["snr_db"]: row for row in rows if row["beta"] == beta}
-        value_key = "anchored_se" if args.plot_value == "anchored" else "raw_noisy_se_mean"
-        y_values = [beta_rows[snr][value_key] for snr in snrs]
-        plt.plot(
-            snrs,
-            y_values,
-            marker=marker_cycle[idx % len(marker_cycle)],
-            linewidth=2.2,
-            markersize=6,
-            color=color_cycle[idx % len(color_cycle)],
-            label=rf"$\beta_{{IB}}={beta:g}$",
-        )
-
-    plt.xlabel("Channel Estimation SNR (dB)")
-    plt.ylabel("Historical-clean-anchored sum SE (bps/Hz)" if args.plot_value == "anchored" else "Direct sum SE (bps/Hz)")
-    plt.grid(True, linestyle=":", linewidth=0.8, alpha=0.7)
-    plt.legend(fontsize=9)
-    if args.invert_x_axis:
-        plt.gca().invert_xaxis()
-    plt.tight_layout()
-    plt.savefig(output_path, dpi=300)
 
 
 def main() -> None:
@@ -266,7 +226,6 @@ def main() -> None:
     parser.add_argument("--betas", type=str, default="0,1,4,16,32,64")
     parser.add_argument("--snrs", type=str, default="20,15,10,5,0,-5")
     parser.add_argument("--trials", type=int, default=5)
-    parser.add_argument("--plot_value", choices=["raw", "anchored"], default="anchored", help="Plot a direct SE or explicitly historical-clean-anchored curve; both remain in the CSV")
     parser.add_argument("--split_seed", type=int, default=42)
     parser.add_argument("--noise_seed", type=int, default=20260603)
     parser.add_argument(
@@ -286,14 +245,12 @@ def main() -> None:
     parser.add_argument("--cap_degradation_at_one", action="store_true", default=True)
     parser.add_argument("--allow_noisy_gain", dest="cap_degradation_at_one", action="store_false")
     parser.add_argument("--output_prefix", type=str, default="robustness_beta_corrected")
-    parser.add_argument("--invert_x_axis", action="store_true", default=False)
     args = parser.parse_args()
 
     torch.manual_seed(args.split_seed)
     np.random.seed(args.split_seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
-    print(f"Plot value: {args.plot_value}; anchored values are historical normalizations, not direct SE")
     print(f"Deterministic latent: {args.deterministic_latent}")
     print(f"Noise mode: {args.noise_mode}")
     print(f"Recompute MR precoder from noisy H: {args.recompute_precoder}")
@@ -358,13 +315,10 @@ def main() -> None:
 
     clean_csv = f"{args.output_prefix}_clean_audit.csv"
     result_csv = f"{args.output_prefix}_results.csv"
-    figure_path = f"{args.output_prefix}.png"
     write_csv(clean_rows, clean_csv)
     write_csv(rows, result_csv)
-    plot_results(rows, args, figure_path)
     print(f"\nSaved clean audit: {clean_csv}")
     print(f"Saved robustness results: {result_csv}")
-    print(f"Saved plot: {figure_path}")
 
 
 if __name__ == "__main__":

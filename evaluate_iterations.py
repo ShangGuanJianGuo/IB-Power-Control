@@ -1,10 +1,10 @@
+import csv
 import argparse
 import os
 import random
 from pathlib import Path
 from typing import List, Tuple
 
-import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
@@ -149,34 +149,10 @@ def collect_iteration_curve(
     return avg_se, gains
 
 
-def save_plot(avg_se: List[float], save_path: str, title: str) -> None:
-    steps = list(range(len(avg_se)))
-
-    plt.figure(figsize=(8.0, 5.5))
-    plt.plot(steps, avg_se, marker="o", linewidth=2.2, markersize=8, color="#1f77b4")
-
-    for step, value in zip(steps, avg_se):
-        plt.annotate(
-            f"{value:.2f}",
-            (step, value),
-            textcoords="offset points",
-            xytext=(0, 8),
-            ha="center",
-            fontsize=10,
-        )
-
-    plt.xticks(steps, [f"t={step}" for step in steps], fontsize=11)
-    plt.xlabel("Iteration Step", fontsize=12)
-    plt.ylabel("Average Sum SE (bps/Hz)", fontsize=12)
-    plt.title(title, fontsize=13)
-    plt.grid(True, linestyle=":", alpha=0.65)
-    plt.tight_layout()
-    plt.savefig(save_path, dpi=300)
-    plt.close()
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Plot average sum SE across the three old-model refinement steps.")
+    parser = argparse.ArgumentParser(description="Evaluate average sum SE across refinement steps and export numeric results.")
     parser.add_argument("--checkpoint", type=str, required=True, help="Path to old-model checkpoint, e.g., federated_cluster_beta_10.0.pth")
     parser.add_argument("--data_dir", type=str, default=".")
     parser.add_argument("--samples", type=int, default=5000)
@@ -189,7 +165,7 @@ def main():
     parser.add_argument("--z_dim", type=int, default=16)
     parser.add_argument("--num_iterations", type=int, default=3)
     parser.add_argument("--n_neighbors", type=int, default=10)
-    parser.add_argument("--output_plot", type=str, default="iteration_se_curve_v2.png")
+    parser.add_argument("--output_csv", type=str, default="iteration_se_results.csv")
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
@@ -239,12 +215,16 @@ def main():
         print(f"Gain t={idx}->t={idx + 1} = {gain:.6f} bps/Hz")
     print("=" * 72)
 
-    save_plot(
-        avg_se=avg_se,
-        save_path=args.output_plot,
-        title="Average Sum SE Across Iterative Refinement Steps",
-    )
-    print(f"\nPlot saved to: {Path(args.output_plot).resolve()}")
+    with open(args.output_csv, 'w', encoding='utf-8', newline='') as handle:
+        writer = csv.DictWriter(handle, ['step', 'mean_sum_se', 'gain_absolute', 'gain_percent'])
+        writer.writeheader()
+        for step, value in enumerate(avg_se):
+            previous = avg_se[step - 1] if step else None
+            writer.writerow(dict(step=step, mean_sum_se=value,
+                                 gain_absolute=value - previous if previous is not None else '',
+                                 gain_percent=100 * (value / previous - 1) if previous else ''))
+    print(f'Saved iteration results to {args.output_csv}')
+
 
 
 if __name__ == "__main__":

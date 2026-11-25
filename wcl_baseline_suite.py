@@ -201,10 +201,6 @@ def lsfc_effective_exponent(args) -> float:
     return args.lsfc_exponent
 
 
-def local_channel_gain_power(h: torch.Tensor, mask: torch.Tensor, p_max: float) -> torch.Tensor:
-    gain = torch.mean(torch.abs(h) ** 2, dim=-1) * mask
-    denom = gain.sum(dim=2, keepdim=True).clamp(min=1e-12)
-    return p_max * gain / denom
 
 
 def masked_wmmse_power_control(
@@ -308,22 +304,6 @@ def build_ib_model(args) -> TaskOrientedIBFederatedController:
     )
 
 
-def load_proposed_checkpoint(path: Path, args, device: torch.device) -> TaskOrientedIBFederatedController:
-    checkpoint = torch.load(path, map_location="cpu")
-    train_args = checkpoint.get("args", {})
-    model = TaskOrientedIBFederatedController(
-        L=train_args.get("L", args.L),
-        K=train_args.get("K", args.K),
-        M=train_args.get("M", args.M),
-        z_dim=train_args.get("z_dim", args.z_dim),
-        p_max=train_args.get("Pmax", args.Pmax),
-        num_clients=train_args.get("num_clients", args.num_clients),
-        num_power_iterations=train_args.get("num_power_iterations", args.num_power_iterations),
-        message_rounds=train_args.get("message_rounds", args.message_rounds),
-        damping=train_args.get("damping", args.damping),
-    ).to(device)
-    model.load_state_dict(checkpoint["model_state_dict"])
-    return model
 
 
 def summarize_metrics(rates: torch.Tensor, elapsed: float, samples: int, extra: Optional[Dict[str, float]] = None) -> Dict[str, float]:
@@ -353,10 +333,6 @@ def evaluate_static_baseline(loader, device, args, method: str, max_wmmse_sample
 
         if method == "lsfc":
             power = lsfc_local_power(beta_linear, mask, args.Pmax, exponent=lsfc_effective_exponent(args))
-        elif method == "local_gain":
-            power = local_channel_gain_power(h, mask, args.Pmax)
-        elif method == "cluster_wmmse":
-            power = masked_wmmse_power_control(h, w, mask, args.Pmax, iterations=args.cluster_wmmse_iter)
         elif method == "central_wmmse":
             power = centralized_wmmse_power_control(h, w, args.Pmax, iterations=args.central_wmmse_iter)
         else:
@@ -513,14 +489,10 @@ def train_fl_noib(args, client_loaders, val_loader, device, checkpoint_path: Pat
     return model
 
 
-def active_link_count(split: BaselineSplit) -> float:
-    return float(split.mask.sum(dim=(1, 2)).mean().item())
 
 
 def overhead_info(method: str, args, split: BaselineSplit, kl_nats: Optional[float] = None) -> Dict[str, str]:
     raw_global_scalars = 2.0 * args.L * args.K * args.M
-    active_links = active_link_count(split)
-    cluster_csi_scalars = 2.0 * args.M * active_links
     latent_scalars = args.L * args.z_dim * args.message_rounds * args.num_power_iterations
 
     if method == "LSFC local":
@@ -534,12 +506,6 @@ def overhead_info(method: str, args, split: BaselineSplit, kl_nats: Optional[flo
         else:
             info = "service mask only"
         return {"online_info": info, "overhead_norm": "0.0000", "rate_proxy_bits": "-"}
-    if method == "Cluster WMMSE":
-        return {
-            "online_info": "cluster CSI/statistics",
-            "overhead_norm": f"{cluster_csi_scalars / raw_global_scalars:.4f}",
-            "rate_proxy_bits": "-",
-        }
     if method == "Decentralized DNN w/o IB":
         return {"online_info": "local observation", "overhead_norm": "0.0000", "rate_proxy_bits": "-"}
     if method == "FL w/o IB":
@@ -547,13 +513,6 @@ def overhead_info(method: str, args, split: BaselineSplit, kl_nats: Optional[flo
             "online_info": "deterministic latent",
             "overhead_norm": f"{latent_scalars / raw_global_scalars:.4f}",
             "rate_proxy_bits": "-",
-        }
-    if method == "Proposed IB-FL":
-        bits = "-" if kl_nats is None else f"{kl_nats / np.log(2.0):.4f}"
-        return {
-            "online_info": "IB compressed latent",
-            "overhead_norm": f"{latent_scalars / raw_global_scalars:.4f}",
-            "rate_proxy_bits": bits,
         }
     if method == "Centralized WMMSE":
         return {"online_info": "global instantaneous CSI", "overhead_norm": "1.0000", "rate_proxy_bits": "-"}
@@ -564,10 +523,8 @@ def row(method: str, category: str, metrics: Dict[str, float], args, split: Base
     info = overhead_info(method, args, split, metrics.get("kl_nats"))
     complexity = {
         "LSFC local": "Low",
-        "Cluster WMMSE": f"High, {args.cluster_wmmse_iter} iter.",
         "Decentralized DNN w/o IB": "Low, fixed-depth",
         "FL w/o IB": "Low, fixed-depth",
-        "Proposed IB-FL": "Low, fixed-depth",
         "Centralized WMMSE": f"Very high, {args.central_wmmse_iter} iter.",
     }.get(method, "-")
     return {
@@ -595,14 +552,6 @@ def write_csv(path: Path, rows: Iterable[Dict[str, str]]) -> None:
         writer.writerows(rows)
 
 
-def markdown_table(rows: List[Dict[str, str]]) -> str:
-    if not rows:
-        return ""
-    headers = list(rows[0].keys())
-    lines = ["| " + " | ".join(headers) + " |", "| " + " | ".join(["---"] * len(headers)) + " |"]
-    for item in rows:
-        lines.append("| " + " | ".join(item[h] for h in headers) + " |")
-    return "\n".join(lines)
 
 
 def parse_args():
@@ -621,7 +570,6 @@ def parse_args():
     parser.add_argument("--batch_size", type=int, default=16)
     parser.add_argument("--eval_samples", type=int, default=200)
     parser.add_argument("--wmmse_samples", type=int, default=80)
-    parser.add_argument("--cluster_wmmse_iter", type=int, default=25)
     parser.add_argument("--central_wmmse_iter", type=int, default=25)
     parser.add_argument(
         "--lsfc_fallback_policy",
@@ -642,7 +590,6 @@ def parse_args():
     parser.add_argument("--noib_local_epochs", type=int, default=1)
     parser.add_argument("--noib_lr", type=float, default=1e-3)
     parser.add_argument("--max_train_batches", type=int, default=None)
-    parser.add_argument("--proposed_checkpoint", type=str, default="ibfl_federated_best.pth")
     parser.add_argument("--output_dir", type=str, default="wcl_baseline_results")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--retrain", action="store_true")
@@ -678,10 +625,6 @@ def main() -> None:
     metrics = evaluate_static_baseline(test_loader, device, args, "lsfc")
     rows.append(row("LSFC local", "zero-fronthaul heuristic", metrics, args, test_split))
 
-    print("Evaluating Cluster WMMSE...")
-    metrics = evaluate_static_baseline(test_loader, device, args, "cluster_wmmse", max_wmmse_samples=args.wmmse_samples)
-    rows.append(row("Cluster WMMSE", "distributed optimization", metrics, args, test_split))
-
     dec_ckpt = ckpt_dir / "decentralized_dnn_noib.pth"
     if args.skip_training_baselines and not dec_ckpt.exists():
         print("Skipping Decentralized DNN w/o IB because checkpoint is missing.")
@@ -700,40 +643,13 @@ def main() -> None:
         metrics = evaluate_ib_model(noib_model, test_loader, device, deterministic=True)
         rows.append(row("FL w/o IB", "learning ablation", metrics, args, test_split))
 
-    proposed_path = Path(args.proposed_checkpoint)
-    if proposed_path.exists():
-        print("Evaluating Proposed IB-FL checkpoint...")
-        proposed_model = load_proposed_checkpoint(proposed_path, args, device)
-        metrics = evaluate_ib_model(proposed_model, test_loader, device, deterministic=True)
-        rows.append(row("Proposed IB-FL", "proposed", metrics, args, test_split))
-    else:
-        print(f"Proposed checkpoint not found: {proposed_path}")
-
     print("Evaluating Centralized WMMSE benchmark...")
     metrics = evaluate_static_baseline(test_loader, device, args, "central_wmmse", max_wmmse_samples=args.wmmse_samples)
     rows.append(row("Centralized WMMSE", "centralized benchmark", metrics, args, test_split))
 
     write_csv(output_dir / "wcl_baseline_table.csv", rows)
-    summary = [
-        "# WCL Baseline Suite Results",
-        "",
-        f"Device: `{device}`",
-        f"Beta source: `{bundle['beta_source']}`",
-        f"Train/val/test sizes: {len(train_split)}/{len(val_split)}/{len(test_split)}",
-        f"WMMSE eval samples: {min(args.wmmse_samples, len(test_split))}",
-        "",
-        markdown_table(rows),
-        "",
-        "Notes:",
-        "- Centralized WMMSE uses global instantaneous CSI and is not counted as a fair distributed baseline.",
-        "- Cluster WMMSE is restricted to the same user-centric AP-UE mask.",
-        "- LSFC local uses saved large-scale fading coefficients when available; otherwise it uses a fractional channel-gain proxy with zero online fronthaul.",
-        "- Decentralized DNN w/o IB has decentralized inference and no online AP-AP latent exchange.",
-        "- FL w/o IB keeps latent collaboration and FL training but removes the IB rate penalty by deterministic no-KL training.",
-        "- Proposed IB-FL is evaluated from the supplied checkpoint without altering its weights.",
-    ]
-    (output_dir / "wcl_baseline_summary.md").write_text("\n".join(summary), encoding="utf-8")
-    print("\n".join(summary))
+    print(f"Saved comparison results to {output_dir / 'wcl_baseline_table.csv'}")
+
 
 
 if __name__ == "__main__":

@@ -13,7 +13,6 @@ from torch.utils.data import TensorDataset, DataLoader
 import numpy as np
 import os
 from tqdm import tqdm
-import matplotlib.pyplot as plt
 import argparse
 
 from model_architecture_v2 import Iterative_IB_System, unsupervised_se_loss
@@ -294,45 +293,6 @@ def run_experiment(args):
             'val_history': val_se_history
         })
         
-        # 绘制训练曲线
-        plt.figure(figsize=(10, 6))
-        plt.plot(train_se_history, label='Train SE', linewidth=2)
-        plt.plot(val_se_history, label='Val SE', linewidth=2)
-        plt.axhline(y=136.8, color='r', linestyle='--', label='WMMSE Upper Bound')
-        plt.xlabel('Epoch', fontsize=12)
-        plt.ylabel('Sum Spectral Efficiency (bps/Hz)', fontsize=12)
-        plt.title(f'Training Progress (β={beta})', fontsize=14)
-        plt.legend(fontsize=11)
-        plt.grid(True, linestyle=':', alpha=0.7)
-        plt.tight_layout()
-        plt.savefig(f"training_curve_beta_{beta}.png", dpi=300)
-        plt.close()
-    
-    # 绘制权衡曲线（如果有多个beta）
-    if len(results) > 1:
-        plt.figure(figsize=(10, 7))
-        
-        betas = [r['beta'] for r in results]
-        ses = [r['best_val_se'] for r in results]
-        
-        plt.plot(betas, ses, 'o-', linewidth=2, markersize=10, label='Iterative IB (v2)')
-        plt.axhline(y=136.8, color='r', linestyle='--', linewidth=2, label='WMMSE Upper Bound')
-        
-        # 标注
-        for beta, se in zip(betas, ses):
-            plt.annotate(f'{se:.1f}', (beta, se), textcoords="offset points",
-                        xytext=(0, 10), ha='center', fontsize=10)
-        
-        plt.xscale('log')
-        plt.xlabel('Compression Weight (β)', fontsize=12)
-        plt.ylabel('Validation SE (bps/Hz)', fontsize=12)
-        plt.title('Performance vs. Compression Trade-off (Iterative IB v2)', fontsize=14)
-        plt.legend(fontsize=11)
-        plt.grid(True, which='both', linestyle=':', alpha=0.7)
-        plt.tight_layout()
-        plt.savefig('tradeoff_iterative_ib_v2.png', dpi=300)
-        print("\nTrade-off curve saved to tradeoff_iterative_ib_v2.png")
-    
     # 保存所有结果
     np.save('training_results_v2.npy', results)
     print("\nAll results saved to training_results_v2.npy")

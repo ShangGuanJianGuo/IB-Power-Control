@@ -1,67 +1,54 @@
-﻿最终定稿论文源码：文件用途说明
-对应文章：https://ieeexplore.ieee.org/abstract/document/11614834
-本次来源：final_信息瓶颈_3.12。仅发布源码，不包含信道、权重、论文PDF或Word报告代码。
-源码文件全部平铺。运行时由原实验脚本产生的输出目录不属于发布包的源码目录结构。
+﻿论文实验源码文件说明
+文章：https://ieeexplore.ieee.org/abstract/document/11614834
+来源：final_信息瓶颈_3.12；只包含文章算法和实验计算。
+所有源码平铺；不包含画图脚本、信道具体文件、预训练权重、Word报告或发布审查文档。
 
-一、20个Python代码文件
+一、Python代码
 1. CF_mMIMO_Channel.py
-   生成位置、相关信道H、带原始MR幅度的W和真实LSFC数组Beta；支持样本数、规模、功率、seed。
+   生成AP/用户位置、相关信道H、MR预编码W及大尺度衰落Beta数组。
 2. functionRlocalscattering.py
-   局部散射空间相关矩阵；展平Toeplitz输入以兼容当前SciPy。
+   构造局部散射空间相关矩阵，供信道生成器调用。
 3. model_architecture_v2.py
-   最终根目录的4K观察IB编码器、加权聚合、3步功率策略和SE计算；采用最终版投影，仍有已记录的物理口径问题。
+   文章主模型：IB编码器、上下文聚合、迭代功率策略、SINR和SE损失。
 4. train_federated_cluster.py
-   原服务簇标记训练仿真、验证和federated_cluster_beta_*.pth保存；联合数据训练，不是多设备通信部署。
+   主方案训练、验证、保存联邦权重和逐轮训练记录；仅保留训练流程。
 5. train_and_evaluate_v2.py
-   原集中式IB训练，保存best_model_beta_*.pth；beta4集中式权重对应表II逐轮结果。
+   集中式IB训练，保存best_model_beta_*.pth与不同beta的训练数据。
 6. benchmark_upper_bound.py
-   原WMMSE基线与绝对SE统计；名称沿用作者，WMMSE是参考算法而非已证明全局上界。
-7. robustness_beta_sweep_corrected.py
-   最终IB噪声测试主入口：每链路加噪、重算MR、真实信道SE、重复试验；同时导出直接raw与历史clean锚定值。
-8. wmmse_robustness_corrected.py
-   与IB匹配的最终WMMSE噪声测试：相同验证划分、每链路噪声、同种子及5次重复。
-9. test_noise_federated.py
-   旧文件名兼容入口，已替换为调用robustness_beta_sweep_corrected.py；不再运行旧整场景噪声算法。
-10. test_wmmse_noise.py
-   旧文件名兼容入口，已替换为调用wmmse_robustness_corrected.py。
-11. plot_iteration_se_v2.py
-   用指定权重在尾部测试场景捕获每轮SE并绘图；配合best_model_beta_4.0.pth重现表II。
-12. plot_iteration_se_federated.py
-   对联邦权重按原400验证场景和预处理检查逐轮SE，避免与集中式表II混用。
-13. measure_online_overhead.py
-   固定宽度上行载荷与KL信息率代理账本；保留历史SE比例并明确来源，同时输出当前前向SE。
-14. local_mmse_precoder_ablation.py
-   固定策略的MRT/局部MMSE接口替换检查；明确输出raw与anchored值。
-15. ibfl_data.py
-   学习对照所需的数据、Beta/服务掩码、区域客户端划分和加载器；Beta缺失时会回退瞬时功率。
-16. ibfl_models.py
-   学习对照使用的新分支网络：条件IB、个性化adapter和功率头；不是旧联邦权重的可互换模型。
-17. wcl_baseline_suite.py
-   LSFC、本地神经、确定性无KL联邦对照及WMMSE的训练/评估；可生成两个学习对照权重。
-18. yu2023_cl_dpc_baseline.py
-   Yu2023式合作去中心功控适配方案的训练、验证与评估；支持原torch划分。
-19. privacy_attack.py
-   来自最终目录privacy_attack copy 3.py：z到Beta代理的监督解码攻击；导出MSE和测试集平均Pearson，不是梯度反演。
-20. plot_paper_results.py
-   从新导出CSV/MAT绘制联合噪声比较图和隐私图；不手工录入数据，不以单例相关替代总体均值。
+   WMMSE功率控制参考方案，计算并保存逐场景SE及均值。
+7. evaluate_iterations.py
+   表II逐步计算：读取指定权重，输出各步平均SE、绝对增益和百分比增益CSV。
+8. robustness_beta_sweep_corrected.py
+   最终IB噪声实验：逐AP-用户链路加噪、重算MR、真实信道评估、重复试验，导出CSV。
+9. wmmse_robustness_corrected.py
+   与IB相同数据划分和噪声协议的WMMSE鲁棒性计算，导出CSV。
+10. measure_online_overhead.py
+   测量当前模型SE与KL代理，计算完整CSI和潜在消息的位数、比例；只导出实际计算字段。
+11. privacy_attack.py
+   文章隐私实验的潜在向量重构攻击：训练解码器，导出MSE、测试集平均Pearson和重构向量。
+12. wcl_baseline_suite.py
+   表III的LSFC、本地神经控制、无IB正则联邦控制和WMMSE对照训练/评估。
+13. yu2023_cl_dpc_baseline.py
+   表III的Yu2023式合作去中心功率控制适配方案，含训练与数值评估。
+14. ibfl_data.py
+   两个对照脚本共同依赖的数据读取、Beta/服务掩码构建和数据划分函数。
+15. ibfl_models.py
+   本地/联邦学习对照所用模型与指标汇总，供wcl_baseline_suite.py调用。
+16. local_mmse_precoder_ablation.py
+   固定功控模型的MRT与AP本地MMSE预编码替换实验，导出数值结果。
 
-二、说明与配置文件
-README.md：英文主入口：论文、安装、完整运行顺序、更新噪声流程、raw/anchored区分及复现范围。
-KNOWN_ISSUES.md：已确认的版本配套、物理功率、LSFC、开销及攻击协议问题，避免把源码同步当作所有结论已验证。
-VALIDATION.md：此次发布包实际执行的验证及其范围。
-SOURCE_PROVENANCE.json：每份源码来源、发布适配和校验标识；不包含数据或权重。
-requirements.txt：本机已验证的依赖版本。
+二、必要配置与使用说明
+.gitignore：忽略运行生成的数据、权重、日志和缓存。
+.gitattributes：Git文本换行设置。
+requirements.txt：运行所需Python依赖，不包含Matplotlib。
+README.md：安装方法、论文实验运行顺序和输出字段说明。
 CITATION.cff：GitHub论文引用元数据。
-citation.bib：论文BibTeX。
-.gitignore：忽略生成的数据、权重、图像、CSV、日志和缓存，保持源码发布。
-.gitattributes：文本换行设置。
-文件说明.txt：所有代码及说明文件的逐项用途。
-上传说明.txt：当前仓库下载、更新和本地使用说明。
+citation.bib：对应文章的BibTeX引用。
+文件说明.txt：本文件，逐项说明全部源码与配置。
 
-三、噪声脚本更新重点
-正式入口为robustness_beta_sweep_corrected.py和wmmse_robustness_corrected.py。test_noise_federated.py/test_wmmse_noise.py已替换为正式入口的兼容调用，避免继续跑旧的整场景噪声。
-最终协议：前4000场景内部seed42的400验证场景；per_link噪声；噪声CSI重算MR；真实信道计算SE；5次有噪重复。
-IB CSV同时包含raw_current_clean_se、raw_noisy_se_mean/std和anchored_se。anchored_se是历史clean归一结果，不是直接前向SE。默认原单脚本图沿用anchored；README明确用--plot_value raw和联合绘图--value raw查看直接值。
-
-四、范围
-完成了历史主数据/权重复算和发布包功能验证，但没有重新完成全部模型100/150轮收敛训练。已知物理功率、LSFC与旧权重问题见KNOWN_ISSUES.md。不要以恢复旧乘Pmax规则当作正式修复。
+三、运行关系
+信道生成 → 主模型训练/集中式训练 → WMMSE参考、逐步SE、噪声、开销、隐私及对照方案计算。
+更新后的噪声主入口是robustness_beta_sweep_corrected.py和wmmse_robustness_corrected.py。
+ibfl_data.py由wcl_baseline_suite.py、yu2023_cl_dpc_baseline.py导入；ibfl_models.py由wcl_baseline_suite.py导入，属于论文对照依赖。
+evaluate_iterations.py保留表II逐步计算，结果只输出CSV。训练、噪声和隐私程序不生成图像。
+具体命令与数据字段见README.md。

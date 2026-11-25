@@ -1,14 +1,7 @@
-"""Corrected WMMSE robustness evaluation under the same protocol as IB curves.
+"""Evaluate WMMSE with the same per-link noise protocol as the IB experiment.
 
-The corrected IB robustness curves use:
-  * the validation split from the first train_samples channel realizations;
-  * per-link channel-estimation noise;
-  * MR precoding recomputed from the noisy CSI;
-  * clean-channel SE evaluation with the actually used noisy-CSI precoder;
-  * repeated noise trials with deterministic seeds.
-
-This script applies the same protocol to centralized WMMSE power control.  It is
-separate from test_wmmse_noise.py so the older script and figures remain intact.
+Use the matched validation split, recompute MR from noisy CSI, evaluate on the
+true channel, and export repeated-trial SE means and standard deviations.
 """
 
 import argparse
@@ -17,7 +10,6 @@ import os
 from dataclasses import dataclass
 from typing import Dict, List
 
-import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from tqdm import tqdm
@@ -189,19 +181,6 @@ def write_csv(rows: List[Dict[str, float]], path: str) -> None:
         writer.writerows(rows)
 
 
-def plot_results(rows: List[Dict[str, float]], output_path: str, args: argparse.Namespace) -> None:
-    snrs = [row["snr_db"] for row in rows if row["snr_db"] < 100]
-    values = [row["sum_se_mean"] for row in rows if row["snr_db"] < 100]
-    plt.figure(figsize=(7.2, 5.2))
-    plt.plot(snrs, values, "k--p", linewidth=2.5, markersize=8, markerfacecolor="k", label="WMMSE")
-    plt.xlabel("Channel Estimation SNR (dB)")
-    plt.ylabel("Sum SE (bps/Hz)")
-    plt.grid(True, linestyle=":", linewidth=0.8, alpha=0.7)
-    plt.legend()
-    if args.invert_x_axis:
-        plt.gca().invert_xaxis()
-    plt.tight_layout()
-    plt.savefig(output_path, dpi=300)
 
 
 def main() -> None:
@@ -231,7 +210,6 @@ def main() -> None:
     parser.add_argument("--recompute_precoder", action="store_true", default=True)
     parser.add_argument("--keep_clean_precoder", dest="recompute_precoder", action="store_false")
     parser.add_argument("--output_prefix", type=str, default="wmmse_robustness_corrected")
-    parser.add_argument("--invert_x_axis", action="store_true", default=False)
     args = parser.parse_args()
 
     torch.manual_seed(args.split_seed)
@@ -268,11 +246,8 @@ def main() -> None:
         print(f"SNR={snr:g} dB | Sum SE={mean_value:.4f} ± {std_value:.4f}")
 
     csv_path = f"{args.output_prefix}_results.csv"
-    figure_path = f"{args.output_prefix}.png"
     write_csv(rows, csv_path)
-    plot_results(rows, figure_path, args)
     print(f"\nSaved WMMSE results: {csv_path}")
-    print(f"Saved WMMSE plot: {figure_path}")
 
 
 if __name__ == "__main__":
