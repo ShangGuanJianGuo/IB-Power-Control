@@ -65,6 +65,7 @@ def RandomChannel(L, K, M, set_number):
 
     # compute H
     H = np.zeros((set_number, nbrOfRealizations, L, K, M), dtype='complex')
+    Beta = np.zeros((set_number, L, K), dtype='float64')
     start_time = time.time()
     for nbr in range(set_number):
         end_time = time.time()
@@ -94,9 +95,11 @@ def RandomChannel(L, K, M, set_number):
                 CorrR[:, :, k2, j2] = betas[k2, j2] * R[:, :, k2, j2]
                 Rsqrt = sl.sqrtm(CorrR[:, :, k2, j2])
                 H[nbr, 0, j2, k2, :] = np.matmul(Rsqrt, CH[:, :, k2, j2]).reshape(M)
+        Beta[nbr] = betas.T
     W = math.sqrt(Pmax / K) * H / np.linalg.norm(H, axis=-1).reshape((set_number, nbrOfRealizations, L, K, 1))
     np.save("setHCF_L" + str(L) + "_K" + str(K) + "_M" + str(M) + "_number" + str(set_number) + ".npy", H)
     np.save("setWCF_L" + str(L) + "_K" + str(K) + "_M" + str(M) + "_number" + str(set_number) + ".npy", W)
+    np.save("setBetaCF_L" + str(L) + "_K" + str(K) + "_M" + str(M) + "_number" + str(set_number) + ".npy", Beta)
     # MR
     sum_SE_CF_MMSE_MR = functionCompute_SE_Dist(H, W, 1, set_number, K)
     print(sum(sum_SE_CF_MMSE_MR) / set_number)
@@ -106,16 +109,18 @@ def RandomChannel(L, K, M, set_number):
 
 if __name__ == '__main__':
     import argparse
-    parser = argparse.ArgumentParser(description='Generate the paper channel and MR precoder data')
+    parser = argparse.ArgumentParser(description='Generate correlated channels, MR precoders and true LSFC arrays')
     parser.add_argument('--L', type=int, default=40)
     parser.add_argument('--K', type=int, default=30)
     parser.add_argument('--M', type=int, default=8)
     parser.add_argument('--samples', type=int, default=5000)
-    parser.add_argument('--Pmax', type=float, default=1000)
+    parser.add_argument('--Pmax', type=float, default=1000.0)
     parser.add_argument('--seed', type=int, default=42)
     args = parser.parse_args()
-    L, K, M = args.L, args.K, args.M
+    if min(args.L, args.K, args.M, args.samples) < 1 or args.Pmax <= 0:
+        parser.error('Dimensions, sample count and Pmax must be positive')
     Pmax = args.Pmax
     nbrOfRealizations = 1
+    squareLength = 1000
     np.random.seed(args.seed)
-    RandomChannel(L, K, M, args.samples)
+    RandomChannel(args.L, args.K, args.M, args.samples)

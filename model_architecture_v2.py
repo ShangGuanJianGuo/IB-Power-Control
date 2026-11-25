@@ -3,6 +3,7 @@
 - 方案1: Encoder看到瞬时CSI的统计特征
 - 方案4: 迭代优化模仿WMMSE
 
+目标: 从103 bps/Hz 提升到 130-135 bps/Hz
 """
 
 import torch
@@ -272,7 +273,7 @@ class Iterative_IB_System(nn.Module):
         scaling_factor = torch.clamp(ap_power_sum / self.Pmax, min=1.0)
         
         # 归一化
-        P_constrained = (P / scaling_factor) * self.Pmax
+        P_constrained = P / scaling_factor
         
         return P_constrained
     

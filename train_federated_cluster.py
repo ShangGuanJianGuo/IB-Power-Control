@@ -389,7 +389,7 @@ if __name__ == "__main__":
     parser.add_argument('--batch_size', type=int, default=16)
     parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('--lr', type=float, default=1e-3)
-    parser.add_argument('--beta', type=float, default=8.0)
+    parser.add_argument('--beta', type=float, default=10.0)
     parser.add_argument('--forget_ue', type=int, default=0)
     parser.add_argument('--unlearn_epochs', type=int, default=5)
     

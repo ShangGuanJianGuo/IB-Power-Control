@@ -1,30 +1,67 @@
-论文GitHub上传包：文件用途说明
+﻿最终定稿论文源码：文件用途说明
+对应文章：https://ieeexplore.ieee.org/abstract/document/11614834
+本次来源：final_信息瓶颈_3.12。仅发布源码，不包含信道、权重、论文PDF或Word报告代码。
+源码文件全部平铺。运行时由原实验脚本产生的输出目录不属于发布包的源码目录结构。
 
-对应论文：Low-Overhead Distributed Power Control for Cell-Free Massive MIMO With Limited Fronthaul Capacity
-IEEE链接：https://ieeexplore.ieee.org/abstract/document/11614834
-DOI：10.1109/LWC.2026.3715345
+一、20个Python代码文件
+1. CF_mMIMO_Channel.py
+   生成位置、相关信道H、带原始MR幅度的W和真实LSFC数组Beta；支持样本数、规模、功率、seed。
+2. functionRlocalscattering.py
+   局部散射空间相关矩阵；展平Toeplitz输入以兼容当前SciPy。
+3. model_architecture_v2.py
+   最终根目录的4K观察IB编码器、加权聚合、3步功率策略和SE计算；采用最终版投影，仍有已记录的物理口径问题。
+4. train_federated_cluster.py
+   原服务簇标记训练仿真、验证和federated_cluster_beta_*.pth保存；联合数据训练，不是多设备通信部署。
+5. train_and_evaluate_v2.py
+   原集中式IB训练，保存best_model_beta_*.pth；beta4集中式权重对应表II逐轮结果。
+6. benchmark_upper_bound.py
+   原WMMSE基线与绝对SE统计；名称沿用作者，WMMSE是参考算法而非已证明全局上界。
+7. robustness_beta_sweep_corrected.py
+   最终IB噪声测试主入口：每链路加噪、重算MR、真实信道SE、重复试验；同时导出直接raw与历史clean锚定值。
+8. wmmse_robustness_corrected.py
+   与IB匹配的最终WMMSE噪声测试：相同验证划分、每链路噪声、同种子及5次重复。
+9. test_noise_federated.py
+   旧文件名兼容入口，已替换为调用robustness_beta_sweep_corrected.py；不再运行旧整场景噪声算法。
+10. test_wmmse_noise.py
+   旧文件名兼容入口，已替换为调用wmmse_robustness_corrected.py。
+11. plot_iteration_se_v2.py
+   用指定权重在尾部测试场景捕获每轮SE并绘图；配合best_model_beta_4.0.pth重现表II。
+12. plot_iteration_se_federated.py
+   对联邦权重按原400验证场景和预处理检查逐轮SE，避免与集中式表II混用。
+13. measure_online_overhead.py
+   固定宽度上行载荷与KL信息率代理账本；保留历史SE比例并明确来源，同时输出当前前向SE。
+14. local_mmse_precoder_ablation.py
+   固定策略的MRT/局部MMSE接口替换检查；明确输出raw与anchored值。
+15. ibfl_data.py
+   学习对照所需的数据、Beta/服务掩码、区域客户端划分和加载器；Beta缺失时会回退瞬时功率。
+16. ibfl_models.py
+   学习对照使用的新分支网络：条件IB、个性化adapter和功率头；不是旧联邦权重的可互换模型。
+17. wcl_baseline_suite.py
+   LSFC、本地神经、确定性无KL联邦对照及WMMSE的训练/评估；可生成两个学习对照权重。
+18. yu2023_cl_dpc_baseline.py
+   Yu2023式合作去中心功控适配方案的训练、验证与评估；支持原torch划分。
+19. privacy_attack.py
+   来自最终目录privacy_attack copy 3.py：z到Beta代理的监督解码攻击；导出MSE和测试集平均Pearson，不是梯度反演。
+20. plot_paper_results.py
+   从新导出CSV/MAT绘制联合噪声比较图和隐私图；不手工录入数据，不以单例相关替代总体均值。
 
-一、8个核心Python文件
-CF_mMIMO_Channel.py：生成AP/用户位置、相关信道及MR预编码矩阵，并保存训练所需H、W数组；支持样本数、网络规模、功率与随机种子参数。
-functionRlocalscattering.py：计算局部散射空间相关矩阵，供信道生成器调用。
-model_architecture_v2.py：IB编码器、注意力聚合器、迭代功率策略、系统前向过程与SE损失。
-train_federated_cluster.py：用户簇联邦训练、验证、模型保存，保留原有unlearn可选入口。
-train_and_evaluate_v2.py：集中式IB训练、验证、不同beta设置和训练曲线。
-benchmark_upper_bound.py：原WMMSE功率优化基线与SE统计，文件名沿用原代码。
-test_noise_federated.py：加载训练生成的联邦权重，执行含噪CSI测试和鲁棒性绘图。
-test_wmmse_noise.py：执行含噪CSI下的WMMSE计算、MR预编码更新和鲁棒性统计。
+二、说明与配置文件
+README.md：英文主入口：论文、安装、完整运行顺序、更新噪声流程、raw/anchored区分及复现范围。
+KNOWN_ISSUES.md：已确认的版本配套、物理功率、LSFC、开销及攻击协议问题，避免把源码同步当作所有结论已验证。
+VALIDATION.md：此次发布包实际执行的验证及其范围。
+SOURCE_PROVENANCE.json：每份源码来源、发布适配和校验标识；不包含数据或权重。
+requirements.txt：本机已验证的依赖版本。
+CITATION.cff：GitHub论文引用元数据。
+citation.bib：论文BibTeX。
+.gitignore：忽略生成的数据、权重、图像、CSV、日志和缓存，保持源码发布。
+.gitattributes：文本换行设置。
+文件说明.txt：所有代码及说明文件的逐项用途。
+上传说明.txt：当前仓库下载、更新和本地使用说明。
 
-二、8个仓库说明与配置文件
-README.md：GitHub首页，包含文章信息、环境、完整运行顺序、数据选择、输出说明及BibTeX引用。
-requirements.txt：已检查环境对应的Python依赖版本。
-CITATION.cff：GitHub可识别的引用元数据，首选引用为对应论文。
-citation.bib：可直接用于LaTeX文献管理的BibTeX条目。
-.gitignore：排除生成的数据、权重、图像和缓存，保持仓库为源码发布包。
-.gitattributes：文本与换行配置，便于跨平台协作。
-文件说明.txt：本文件。
-上传说明.txt：供仓库管理员使用的直接上传步骤。
+三、噪声脚本更新重点
+正式入口为robustness_beta_sweep_corrected.py和wmmse_robustness_corrected.py。test_noise_federated.py/test_wmmse_noise.py已替换为正式入口的兼容调用，避免继续跑旧的整场景噪声。
+最终协议：前4000场景内部seed42的400验证场景；per_link噪声；噪声CSI重算MR；真实信道计算SE；5次有噪重复。
+IB CSV同时包含raw_current_clean_se、raw_noisy_se_mean/std和anchored_se。anchored_se是历史clean归一结果，不是直接前向SE。默认原单脚本图沿用anchored；README明确用--plot_value raw和联合绘图--value raw查看直接值。
 
-三、使用顺序
-安装依赖 → 生成信道 → 联邦/集中式训练 → WMMSE基线 → 两类噪声鲁棒性测试。具体命令和参数见README.md。
-本包不带已有信道、权重与历史结果；这些文件在运行时生成。所有文件平铺放置。
-整理来源仅为11.21的8份核心代码及信息瓶颈_11.21_final中的对应Python源码。兼容改动及小规模功能检查范围已在README中列明。
+四、范围
+完成了历史主数据/权重复算和发布包功能验证，但没有重新完成全部模型100/150轮收敛训练。已知物理功率、LSFC与旧权重问题见KNOWN_ISSUES.md。不要以恢复旧乘Pmax规则当作正式修复。

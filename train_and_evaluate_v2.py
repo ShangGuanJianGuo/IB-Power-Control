@@ -298,6 +298,7 @@ def run_experiment(args):
         plt.figure(figsize=(10, 6))
         plt.plot(train_se_history, label='Train SE', linewidth=2)
         plt.plot(val_se_history, label='Val SE', linewidth=2)
+        plt.axhline(y=136.8, color='r', linestyle='--', label='WMMSE Upper Bound')
         plt.xlabel('Epoch', fontsize=12)
         plt.ylabel('Sum Spectral Efficiency (bps/Hz)', fontsize=12)
         plt.title(f'Training Progress (β={beta})', fontsize=14)
@@ -315,6 +316,7 @@ def run_experiment(args):
         ses = [r['best_val_se'] for r in results]
         
         plt.plot(betas, ses, 'o-', linewidth=2, markersize=10, label='Iterative IB (v2)')
+        plt.axhline(y=136.8, color='r', linestyle='--', linewidth=2, label='WMMSE Upper Bound')
         
         # 标注
         for beta, se in zip(betas, ses):
@@ -358,14 +360,14 @@ if __name__ == "__main__":
     parser.add_argument('--n_neighbors', type=int, default=10)
     
     # 训练参数
-    parser.add_argument('--epochs', type=int, default=200)
+    parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('--batch_size', type=int, default=16)
     parser.add_argument('--lr', type=float, default=1e-3)
     parser.add_argument('--patience', type=int, default=20, help='Early stopping patience')
     
     # Beta列表
     parser.add_argument('--beta_list', type=float, nargs='+',
-                       default=[10.0],
+                       default=[4.0],
                        help='List of beta values to test')
     
     args = parser.parse_args()
